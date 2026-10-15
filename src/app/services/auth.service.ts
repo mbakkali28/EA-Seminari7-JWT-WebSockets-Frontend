@@ -14,8 +14,6 @@ import {
 } from '../models';
 
 // Nombres con los que guardo la sesión en localStorage
-const TOKEN_KEY = 'token';
-const REFRESH_TOKEN_KEY = 'refreshToken';
 const USER_KEY = 'user';
 
 // Por qué localStorage y no una cookie HttpOnly (está explicado con más detalle en el README):
@@ -50,6 +48,8 @@ export class AuthService {
   private currentUser = signal<User | null>(readStoredUser());
   readonly user = this.currentUser.asReadonly();
 
+  private currentUserToken = signal<string | null>(null);
+
   // computed: se recalculan solos cada vez que cambia el usuario
   readonly isLoggedIn = computed(() => this.currentUser() !== null);
   readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
@@ -61,26 +61,23 @@ export class AuthService {
 
   /** POST /auth/login. Si va bien, guarda los dos tokens y el usuario */
   login(credentials: LoginRequest): Observable<LoginResponse> {
-    return this.http.post<LoginResponse>(`${this.baseUrl}/login`, credentials).pipe(
+    return this.http.post<LoginResponse>(`${this.baseUrl}/login`, credentials, { withCredentials: true }).pipe(
       // tap: hago algo con la respuesta sin cambiarla; el componente la sigue recibiendo igual
       tap((response) => {
-        localStorage.setItem(TOKEN_KEY, response.token);
-        localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
         localStorage.setItem(USER_KEY, JSON.stringify(response.user));
         this.currentUser.set(response.user);
+        this.currentUserToken.set(response.token);
       }),
     );
   }
 
   /** POST /auth/refresh. Pide un access token nuevo con el refresh token y lo guarda */
   refresh(): Observable<string> {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!refreshToken) {
-      return throwError(() => new Error('No hay refresh token'));
-    }
 
-    return this.http.post<RefreshResponse>(`${this.baseUrl}/refresh`, { refreshToken }).pipe(
-      tap((response) => localStorage.setItem(TOKEN_KEY, response.token)),
+    return this.http.post<RefreshResponse>(`${this.baseUrl}/refresh`, {}, { withCredentials: true }).pipe(
+      tap((response) => {
+        this.currentUserToken.set(response.token);
+      }),
       // map: de la respuesta { token } me quedo solo con el texto del token
       map((response) => response.token),
     );
@@ -88,16 +85,18 @@ export class AuthService {
 
   /** Cierra la sesión: borra lo guardado y lleva al login */
   logout(): void {
-    // Los tokens no se guardan en el servidor, así que cerrar sesión es olvidarlos aquí
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    this.currentUser.set(null);
-    this.router.navigate(['/login']);
+    const clear = () => {
+      localStorage.removeItem(USER_KEY);
+      this.currentUser.set(null);
+      this.currentUserToken.set(null);
+      this.router.navigate(['/login']);
+    };
+
+    this.http.post(`${this.baseUrl}/logout`, {}, { withCredentials: true }).subscribe({ next: clear, error: clear });
   }
 
   /** El access token guardado, o null si no hay sesión. Lo usa el interceptor */
   getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return this.currentUserToken();
   }
 }
