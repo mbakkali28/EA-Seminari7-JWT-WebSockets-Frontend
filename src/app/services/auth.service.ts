@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable, map, tap, throwError } from 'rxjs';
+import { Observable, catchError, map, of, tap} from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import {
@@ -80,6 +80,22 @@ export class AuthService {
       }),
       // map: de la respuesta { token } me quedo solo con el texto del token
       map((response) => response.token),
+    );
+  }
+
+  // Al arrancar: si hay usuario guardado pero el token (que solo vive en memoria) se ha perdido,
+  // lo recupera con la cookie del refresh.
+  restoreSession(): Observable<unknown> {
+    if (!this.currentUser()) {
+      return of(null);
+    }
+
+    return this.refresh().pipe(
+      catchError(() => {
+        localStorage.removeItem(USER_KEY);
+        this.currentUser.set(null);
+        return of(null);
+      }),
     );
   }
 
