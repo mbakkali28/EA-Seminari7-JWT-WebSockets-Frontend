@@ -52,6 +52,10 @@ describe('ChatService', () => {
     );
   });
 
+  it('watchChanges() does not fail without a session token', () => {
+    expect(() => service.watchChanges('author').subscribe()).not.toThrow();
+  });
+
   it('emitting before connecting fails with a clear message', () => {
     expect(() => service.sendMessage('general', 'hola')).toThrowError(/no está conectado/);
   });

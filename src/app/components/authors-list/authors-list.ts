@@ -8,6 +8,7 @@ import { EMPTY, Subject, catchError, finalize, switchMap, tap } from 'rxjs';
 
 import { Author } from '../../models';
 import { AuthorService } from '../../services/author.service';
+import { ChatService } from '../../services/chat.service';
 import { apiErrorMessage } from '../../utils/api-error';
 import { AuthorCard } from '../author-card/author-card';
 import { Pagination } from '../pagination/pagination';
@@ -25,6 +26,7 @@ const PAGE_SIZE = 4;
 })
 export class AuthorsList implements OnInit {
   private authorService = inject(AuthorService);
+  private chat = inject(ChatService);
   private router = inject(Router);
   private pageRequests = new Subject<{ page: number; search: string }>();
 
@@ -77,6 +79,9 @@ export class AuthorsList implements OnInit {
         takeUntilDestroyed(),
       )
       .subscribe();
+
+    // actualiza la pagina si hay cambios
+    this.chat.watchChanges('author').pipe(takeUntilDestroyed()).subscribe(() => this.loadPage(this.page()));
   }
 
   ngOnInit(): void {

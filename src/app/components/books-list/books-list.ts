@@ -10,6 +10,7 @@ import { Book } from '../../models';
 import { LanguageNamePipe } from '../../pipes/language-name-pipe';
 import { TruncatePipe } from '../../pipes/truncate-pipe';
 import { BookService } from '../../services/book.service';
+import { ChatService } from '../../services/chat.service';
 import { apiErrorMessage } from '../../utils/api-error';
 import { Pagination } from '../pagination/pagination';
 import { ConfirmModal } from '../confirm-modal/confirm-modal';
@@ -26,6 +27,7 @@ const PAGE_SIZE = 4;
 })
 export class BooksList implements OnInit {
   private bookService = inject(BookService);
+  private chat = inject(ChatService);
   private pageRequests = new Subject<{ page: number; search: string }>();
 
   books = signal<Book[]>([]);
@@ -42,7 +44,7 @@ export class BooksList implements OnInit {
   private saveViewMode = effect(() => localStorage.setItem('books-view', this.viewMode()));
 
   bookToDelete = signal<Book | null>(null);
-  
+
   deleteBook(book: Book): void {
   this.bookToDelete.set(book);
 }
@@ -78,6 +80,8 @@ export class BooksList implements OnInit {
         takeUntilDestroyed(),
       )
       .subscribe();
+
+    this.chat.watchChanges('book').pipe(takeUntilDestroyed()).subscribe(() => this.loadPage(this.page()));
   }
 
   ngOnInit(): void {

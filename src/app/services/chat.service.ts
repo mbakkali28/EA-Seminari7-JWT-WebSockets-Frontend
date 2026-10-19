@@ -1,9 +1,10 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, Subject, map } from 'rxjs';
+import { Injectable, effect, inject } from '@angular/core';
+import { BehaviorSubject, Observable, Subject, filter, map } from 'rxjs';
 import { io, type Socket } from 'socket.io-client';
 
 import { environment } from '../../environments/environment';
+
 import { AuthService } from './auth.service';
 
 export interface ChatUser {
@@ -21,6 +22,12 @@ export interface ChatMessage {
 
 export interface ChatError {
   message: string;
+}
+
+// Aviso del servidor de un cambio
+export interface DataChange {
+  entity: 'author' | 'book';
+  action: 'created' | 'updated' | 'deleted';
 }
 
 // Mensaje con el que el backend rechaza la conexión si el token falta, es falso o ha caducado
@@ -65,6 +72,27 @@ export class ChatService {
   // Errores funcionales enviados por el backend (por ejemplo, sala no válida).
   private readonly chatErrorSubject = new Subject<ChatError>();
   readonly chatError$ = this.chatErrorSubject.asObservable();
+
+  private readonly dataChangedSubject = new Subject<DataChange>();
+
+  constructor() {
+    // Al cerrar la sesión cierro el socket.
+    effect(() => {
+      if (!this.authService.isLoggedIn()) {
+        this.disconnect();
+      }
+    });
+  }
+
+  // Avisos de cambios
+  watchChanges(entity: DataChange['entity']): Observable<DataChange> {
+    try {
+      this.connect();
+    } catch {
+      // Sin sesión no se puede conectar.
+    }
+    return this.dataChangedSubject.pipe(filter((change) => change.entity === entity));
+  }
 
   getUsers(): Observable<ChatUser[]> {
     // El interceptor HTTP añade el access token a esta petición protegida.
@@ -134,6 +162,10 @@ export class ChatService {
 
     this.socket.on('chat:error', (error: ChatError) => {
       this.chatErrorSubject.next(error);
+    });
+
+    this.socket.on('data:changed', (change: DataChange) => {
+      this.dataChangedSubject.next(change);
     });
 
     // Inicia la conexión después de configurar sus eventos.
